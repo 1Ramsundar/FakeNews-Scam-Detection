@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fake News & Scam Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+    <div class="logo-row">
+        <div class="logo-mark">FN</div>
+        <div class="logo-text">
+            <h1>Fake News & Online Scam Detection</h1>
+            <p>Cybersecurity Threat Analysis Dashboard</p>
+        </div>
+    </div>
+
+    <p class="context-text">
+        Select a threat analysis module to begin investigation
+    </p>
+</header>
+
+<!-- DASHBOARD -->
+<main class="dashboard" id="dashboard">
+
+    <div class="card" onclick="openTextTab()">
+        <h2>Text Analysis</h2>
+        <p>Analyze messages, emails or news content</p>
+    </div>
+
+    <div class="card" onclick="openUrlTab()">
+    <h2>Web URL Check</h2>
+    <p>Verify credibility of a news or message source</p>
+    </div>
+
+    <div class="card" onclick="openImageTab()">
+        <h2>Image Analysis</h2>
+        <p>Scan images for fake or scam content</p>
+    </div>
+
+</main>
+
+<!-- TEXT ANALYSIS PANEL -->
+<section class="panel hidden" id="text-panel">
+
+    <div class="panel-header">
+        <h2>Text Threat Analysis</h2>
+        <button class="back-btn" onclick="goBack()">← Back to Dashboard</button>
+    </div>
+
+    <textarea id="text-input"
+        placeholder="Paste message, news article, or email content here..."></textarea>
+
+    <button class="analyze-btn" onclick="analyzeText()">Analyze Scam Text</button>
+    <button class="analyze-btn secondary" onclick="analyzeFakeNewsText()">
+    Analyze Fake News Text
+    </button>
+
+    <!-- RESULT PANEL -->
+    <div class="result-panel hidden" id="text-result">
+        <h3>Analysis Result</h3>
+
+        <p><strong>Verdict:</strong> <span class="danger"></span></p>
+        <p><strong>Confidence:</strong> <span id="confidence-text"></span></p>
+
+        <p class="indicators-title">Indicators:</p>
+        <ul>
+            <li>Urgent call-to-action detected</li>
+            <li>Suspicious reward-related keywords</li>
+        </ul>
+    </div>
+
+</section>
+
+<!-- URL ANALYSIS PANEL -->
+<section class="panel hidden" id="url-panel">
+
+    <div class="panel-header">
+        <h2>Web URL Threat Analysis</h2>
+        <button class="back-btn" onclick="goBack()">← Back to Dashboard</button>
+    </div>
+
+    <input
+        type="text"
+        id="url-input"
+        placeholder="Paste website or news URL here..."
+        class="url-input"
+    />
+
+    <button class="analyze-btn" onclick="analyzeUrl()">Analyze URL</button>
+
+   <!-- RESULT PANEL -->
+<div class="result-panel hidden" id="url-result">
+    <h3>Source Analysis Result</h3>
+
+    <div class="result-row">
+        <span class="label">Risk Level</span>
+        <span class="value" id="url-risk-level">---</span>
+    </div>
+
+    <div class="result-row">
+        <span class="label">Risk Score</span>
+        <span class="value" id="url-risk-score">--%</span>
+    </div>
+
+    <div class="indicators">
+        <h4>Detected Indicators</h4>
+        <ul id="url-indicators">
+            <!-- dynamically filled -->
+        </ul>
+    </div>
+
+    <div class="model-info">
+        Method: Rule-based URL Heuristics
+    </div>
+</div>
+</section>
+
+ <!--Image Analysis Panel -->
+<section class="panel hidden" id="image-panel">
+
+    <div class="panel-header">
+        <h2>Image Threat Analysis</h2>
+        <button class="back-btn" onclick="goBack()">← Back to Dashboard</button>
+    </div>
+
+    <input type="file" id="image-input" accept="image/*">
+
+    <button class="analyze-btn" onclick="analyzeImage()">Analyze Image</button>
+
+    <div class="result-panel hidden" id="image-result">
+        <h3>Analysis Result</h3>
+
+        <p><strong>Verdict:</strong> <span id="image-verdict"></span></p>
+        <p><strong>Confidence:</strong> <span id="image-confidence"></span></p>
+
+        <p class="indicators-title">Indicators:</p>
+        <ul id="image-indicators"></ul>
+
+        <details>
+            <summary>Extracted Text (OCR)</summary>
+            <p id="ocr-text"></p>
+        </details>
+    </div>
+
+</section>
+
+<script>
+
+    window.onload = function () {
+    document.getElementById("text-panel").classList.add("hidden");
+    document.getElementById("url-panel").classList.add("hidden");
+    document.getElementById("image-panel").classList.add("hidden");
+};
+
+function openTextTab() {
+    document.getElementById("dashboard").style.display = "none";
+    document.getElementById("text-panel").classList.remove("hidden");
+    document.getElementById("text-result").classList.add("hidden");
+}
+
+function goBack() {
+    document.getElementById("text-panel").classList.add("hidden");
+    document.getElementById("url-panel").classList.add("hidden");
+     document.getElementById("image-panel").classList.add("hidden");
+    document.getElementById("dashboard").style.display = "grid";
+}
+
+function analyzeText() {
+    const text = document.getElementById("text-input").value;
+
+    fetch("/analyze-text", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ text: text })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById("text-result").classList.remove("hidden");
+
+        const verdictEl = document.querySelector("#text-result span");
+        verdictEl.className = "";
+
+if (data.verdict === "Safe") {
+    verdictEl.classList.add("safe");
+} else {
+    verdictEl.classList.add("danger");
+}
+
+        verdictEl.textContent = data.verdict;
+
+        document.getElementById("confidence-text").textContent = data.confidence + "%";
+
+        const ul = document.querySelector("#text-result ul");
+        ul.innerHTML = "";
+        data.indicators.forEach(indicator => {
+            const li = document.createElement("li");
+            li.textContent = indicator;
+            ul.appendChild(li);
+        });
+    });
+}
+
+function analyzeFakeNewsText() {
+    const text = document.getElementById("text-input").value;
+
+    fetch("/analyze-fake-news-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById("text-result").classList.remove("hidden");
+
+        const verdictEl = document.querySelector("#text-result span");
+        verdictEl.textContent = data.verdict;
+        verdictEl.className = data.verdict === "Fake News" ? "danger" : "safe";
+
+        document.getElementById("confidence-text").textContent =
+            data.confidence + "%";
+
+        const ul = document.querySelector("#text-result ul");
+        ul.innerHTML = "";
+        data.indicators.forEach(indicator => {
+            const li = document.createElement("li");
+            li.textContent = indicator;
+            ul.appendChild(li);
+        });
+    });
+}
+
+
+function openUrlTab() {
+    document.getElementById("dashboard").style.display = "none";
+    document.getElementById("url-panel").classList.remove("hidden");
+    document.getElementById("url-result").classList.add("hidden");
+}
+
+function analyzeUrl() {
+    const url = document.getElementById("url-input").value.trim();
+    if (!url) {
+        alert("Please enter a URL");
+        return;
+    }
+
+    fetch("/analyze-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url })
+    })
+    .then(response => response.json())
+    .then(data => {
+        const resultPanel = document.getElementById("url-result");
+        const riskLevel = document.getElementById("url-risk-level");
+        const riskScore = document.getElementById("url-risk-score");
+        const indicatorsList = document.getElementById("url-indicators");
+
+        resultPanel.classList.remove("hidden");
+
+        // Set values
+        riskLevel.textContent = data.risk_level;
+        riskScore.textContent = data.risk_score + "%";
+
+        // Reset classes
+        riskLevel.className = "value";
+
+        // Color coding
+        if (data.risk_level === "Trusted") {
+            riskLevel.classList.add("safe");
+        } else if (data.risk_level === "Suspicious") {
+            riskLevel.classList.add("warning");
+        } else {
+            riskLevel.classList.add("danger");
+        }
+
+        // Indicators list
+        indicatorsList.innerHTML = "";
+        if (data.indicators.length === 0) {
+            indicatorsList.innerHTML = "<li>No suspicious patterns detected</li>";
+        } else {
+            data.indicators.forEach(ind => {
+                const li = document.createElement("li");
+                li.textContent = ind;
+                indicatorsList.appendChild(li);
+            });
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert("Error analyzing URL");
+    });
+}
+
+function openImageTab() {
+    document.getElementById("dashboard").style.display = "none";
+    document.getElementById("image-panel").classList.remove("hidden");
+    document.getElementById("image-result").classList.add("hidden");
+}
+
+function analyzeImage() {
+    const fileInput = document.getElementById("image-input");
+
+    if (!fileInput.files.length) {
+        alert("Please upload an image");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("image", fileInput.files[0]);
+
+    fetch("/analyze-image", {
+        method: "POST",
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById("image-result").classList.remove("hidden");
+
+        const verdictEl = document.getElementById("image-verdict");
+        verdictEl.textContent = data.verdict;
+        verdictEl.className = data.verdict === "Safe" ? "safe" : "danger";
+
+        document.getElementById("image-confidence").textContent =
+            data.confidence + "%";
+
+        const ul = document.getElementById("image-indicators");
+        ul.innerHTML = "";
+        data.indicators.forEach(i => {
+            const li = document.createElement("li");
+            li.textContent = i;
+            ul.appendChild(li);
+        });
+
+        document.getElementById("ocr-text").textContent =
+            data.extracted_text || "No text extracted";
+    });
+}
+
+</script>
+
+
+<!-- FOOTER -->
+<footer class="footer">
+    <p>Made by Ramsundar</p>
+</footer>
+
+</body>
+</html>
