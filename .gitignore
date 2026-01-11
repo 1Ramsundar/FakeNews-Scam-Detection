@@ -1,4 +1,6 @@
-dataset/
-__pycache__/
-*.pyc
-.env
+flask
+scikit-learn
+numpy
+pandas
+pillow
+pytesseract
