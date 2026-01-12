@@ -1,4 +1,6 @@
 import os
+import json
+import tempfile
 import pickle
 import re
 from urllib.parse import urlparse
@@ -6,10 +8,18 @@ from urllib.parse import urlparse
 from flask import Flask, render_template, request, jsonify
 from google.cloud import vision
 
+# ---------- GOOGLE CREDENTIALS SETUP (MUST BE FIRST) ----------
+if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
+    creds = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+    temp.write(json.dumps(creds).encode())
+    temp.close()
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp.name
+
+# ---------- CREATE APP ----------
 app = Flask(__name__)
 
 # ---------- LOAD ML MODELS ----------
-
 with open("model/scam_model.pkl", "rb") as f:
     scam_model = pickle.load(f)
 
@@ -22,21 +32,7 @@ with open("model/fake_news_model.pkl", "rb") as f:
 with open("model/fake_news_vectorizer.pkl", "rb") as f:
     fake_news_vectorizer = pickle.load(f)
 
-import os
-import json
-import tempfile
-
-# ---------- GOOGLE CREDENTIALS SETUP ----------
-if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
-    creds = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
-    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
-    temp.write(json.dumps(creds).encode())
-    temp.close()
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp.name
-
 # ---------- GOOGLE VISION CLIENT ----------
-# IMPORTANT: No API key here
-# Auth happens via GOOGLE_APPLICATION_CREDENTIALS
 vision_client = vision.ImageAnnotatorClient()
 
 # ---------- TEXT CLEANING ----------
@@ -63,66 +59,42 @@ def get_registered_domain(domain):
 def home():
     return render_template("index.html")
 
-# ---------- SCAM TEXT ANALYSIS ----------
+# ---------- SCAM TEXT ----------
 @app.route("/analyze-text", methods=["POST"])
 def analyze_text():
     data = request.get_json(force=True)
     text = data.get("text", "").strip()
 
     if not text:
-        return jsonify({
-            "verdict": "No Input",
-            "confidence": 0,
-            "indicators": ["No text provided"]
-        })
+        return jsonify({"verdict": "No Input", "confidence": 0, "indicators": ["No text provided"]})
 
-    cleaned = clean_text(text)
-    vector = scam_vectorizer.transform([cleaned])
-
+    vector = scam_vectorizer.transform([clean_text(text)])
     pred = scam_model.predict(vector)[0]
     prob = scam_model.predict_proba(vector)[0]
-    confidence = int(max(prob) * 100)
-
-    verdict = "Scam Detected" if pred == "scam" else "Safe"
 
     return jsonify({
-        "verdict": verdict,
-        "confidence": confidence,
-        "indicators": [
-            "TF-IDF feature extraction",
-            "Multinomial Naive Bayes classification"
-        ]
+        "verdict": "Scam Detected" if pred == "scam" else "Safe",
+        "confidence": int(max(prob) * 100),
+        "indicators": ["TF-IDF", "Naive Bayes"]
     })
 
-# ---------- FAKE NEWS TEXT ANALYSIS ----------
+# ---------- FAKE NEWS TEXT ----------
 @app.route("/analyze-fake-news-text", methods=["POST"])
 def analyze_fake_news_text():
     data = request.get_json(force=True)
     text = data.get("text", "").strip()
 
     if not text:
-        return jsonify({
-            "verdict": "No Input",
-            "confidence": 0,
-            "indicators": ["No text provided"]
-        })
+        return jsonify({"verdict": "No Input", "confidence": 0, "indicators": ["No text provided"]})
 
-    cleaned = clean_text(text)
-    vector = fake_news_vectorizer.transform([cleaned])
-
+    vector = fake_news_vectorizer.transform([clean_text(text)])
     pred = fake_news_model.predict(vector)[0]
     prob = fake_news_model.predict_proba(vector)[0]
-    confidence = int(max(prob) * 100)
-
-    verdict = "Fake News" if pred == "fake" else "Real News"
 
     return jsonify({
-        "verdict": verdict,
-        "confidence": confidence,
-        "indicators": [
-            "TF-IDF feature extraction",
-            "Fake news classification model"
-        ]
+        "verdict": "Fake News" if pred == "fake" else "Real News",
+        "confidence": int(max(prob) * 100),
+        "indicators": ["TF-IDF", "Fake News ML Model"]
     })
 
 # ---------- URL ANALYSIS ----------
@@ -132,11 +104,7 @@ def analyze_url():
     url = normalize_url(data.get("url", "").strip())
 
     if not url:
-        return jsonify({
-            "risk_level": "No Input",
-            "risk_score": 0,
-            "indicators": ["No URL provided"]
-        })
+        return jsonify({"risk_level": "No Input", "risk_score": 0, "indicators": ["No URL provided"]})
 
     score = 0
     indicators = []
@@ -145,104 +113,49 @@ def analyze_url():
     domain = parsed.netloc.lower()
     registered_domain = get_registered_domain(domain)
 
-    brands = [
-        "google", "paypal", "microsoft", "facebook",
-        "amazon", "apple", "sbi", "paytm", "phonepe"
-    ]
-
-    for brand in brands:
+    for brand in ["google","paypal","amazon","sbi","paytm","phonepe"]:
         if brand in domain and brand not in registered_domain:
             score += 40
-            indicators.append(f"Brand impersonation detected: {brand}")
+            indicators.append(f"Brand impersonation: {brand}")
             break
 
     if len(url) > 75:
         score += 20
-        indicators.append("Unusually long URL")
+        indicators.append("Long URL")
 
     if re.match(r"\d+\.\d+\.\d+\.\d+", domain):
         score += 30
-        indicators.append("IP-based URL detected")
-
-    for kw in ["login", "verify", "secure", "update", "claim", "free"]:
-        if kw in url.lower():
-            score += 10
-            indicators.append(f"Phishing keyword detected: {kw}")
+        indicators.append("IP-based URL")
 
     score = min(score, 100)
+    risk = "Trusted" if score <= 30 else "Suspicious" if score <= 60 else "High Risk"
 
-    if score <= 30:
-        risk = "Trusted"
-    elif score <= 60:
-        risk = "Suspicious"
-    else:
-        risk = "High Risk"
+    return jsonify({"risk_level": risk, "risk_score": score, "indicators": indicators})
 
-    return jsonify({
-        "risk_level": risk,
-        "risk_score": score,
-        "indicators": indicators
-    })
-
-# ---------- IMAGE ANALYSIS (GOOGLE VISION OCR) ----------
+# ---------- IMAGE ANALYSIS (GOOGLE OCR) ----------
 @app.route("/analyze-image", methods=["POST"])
 def analyze_image():
     if "image" not in request.files:
-        return jsonify({
-            "verdict": "No Input",
-            "confidence": 0,
-            "indicators": ["No image uploaded"]
-        })
+        return jsonify({"verdict": "No Input", "confidence": 0, "indicators": ["No image uploaded"]})
 
-    image_file = request.files["image"]
-    content = image_file.read()
-
-    image = vision.Image(content=content)
+    image = vision.Image(content=request.files["image"].read())
     response = vision_client.text_detection(image=image)
 
-    if response.error.message:
-        return jsonify({
-            "verdict": "Unclear",
-            "confidence": 0,
-            "indicators": ["OCR processing failed"]
-        })
+    if response.error.message or not response.text_annotations:
+        return jsonify({"verdict": "Unclear", "confidence": 0, "indicators": ["OCR failed"]})
 
-    texts = response.text_annotations
-    if not texts:
-        return jsonify({
-            "verdict": "Unclear",
-            "confidence": 0,
-            "indicators": ["No readable text detected"]
-        })
-
-    extracted_text = texts[0].description
-    cleaned = clean_text(extracted_text)
-
-    if not cleaned:
-        return jsonify({
-            "verdict": "Unclear",
-            "confidence": 0,
-            "indicators": ["Low OCR confidence"]
-        })
-
-    vector = fake_news_vectorizer.transform([cleaned])
+    text = response.text_annotations[0].description
+    vector = fake_news_vectorizer.transform([clean_text(text)])
     pred = fake_news_model.predict(vector)[0]
     prob = fake_news_model.predict_proba(vector)[0]
-    confidence = int(max(prob) * 100)
-
-    verdict = "Fake News" if pred == "fake" else "Real News"
 
     return jsonify({
-        "verdict": verdict,
-        "confidence": confidence,
-        "indicators": [
-            "Google Cloud Vision OCR",
-            "Fake news ML classification applied"
-        ],
-        "extracted_text": extracted_text[:300]
+        "verdict": "Fake News" if pred == "fake" else "Real News",
+        "confidence": int(max(prob) * 100),
+        "indicators": ["Google Vision OCR", "ML Classification"],
+        "extracted_text": text[:300]
     })
 
-# ---------- RUN APP ----------
+# ---------- RUN ----------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
