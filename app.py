@@ -22,6 +22,18 @@ with open("model/fake_news_model.pkl", "rb") as f:
 with open("model/fake_news_vectorizer.pkl", "rb") as f:
     fake_news_vectorizer = pickle.load(f)
 
+import os
+import json
+import tempfile
+
+# ---------- GOOGLE CREDENTIALS SETUP ----------
+if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
+    creds = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+    temp.write(json.dumps(creds).encode())
+    temp.close()
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp.name
+
 # ---------- GOOGLE VISION CLIENT ----------
 # IMPORTANT: No API key here
 # Auth happens via GOOGLE_APPLICATION_CREDENTIALS
