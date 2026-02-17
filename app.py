@@ -1,20 +1,14 @@
 import os
-import json
-import tempfile
 import pickle
 import re
 from urllib.parse import urlparse
 
 from flask import Flask, render_template, request, jsonify
-from google.cloud import vision
+from PIL import Image
+import pytesseract
 
-# ---------- GOOGLE CREDENTIALS SETUP (MUST BE FIRST) ----------
-if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
-    creds = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
-    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
-    temp.write(json.dumps(creds).encode())
-    temp.close()
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp.name
+# ---------- TESSERACT PATH (LOCAL WINDOWS) ----------
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 # ---------- CREATE APP ----------
 app = Flask(__name__)
@@ -31,9 +25,6 @@ with open("model/fake_news_model.pkl", "rb") as f:
 
 with open("model/fake_news_vectorizer.pkl", "rb") as f:
     fake_news_vectorizer = pickle.load(f)
-
-# ---------- GOOGLE VISION CLIENT ----------
-vision_client = vision.ImageAnnotatorClient()
 
 # ---------- TEXT CLEANING ----------
 def clean_text(text):
@@ -54,7 +45,7 @@ def get_registered_domain(domain):
         return parts[-2] + "." + parts[-1]
     return domain
 
-# ---------- ROUTES ----------
+# ---------- HOME ----------
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -66,7 +57,7 @@ def analyze_text():
     text = data.get("text", "").strip()
 
     if not text:
-        return jsonify({"verdict": "No Input", "confidence": 0, "indicators": ["No text provided"]})
+        return jsonify({"verdict": "No Input", "confidence": 0})
 
     vector = scam_vectorizer.transform([clean_text(text)])
     pred = scam_model.predict(vector)[0]
@@ -85,7 +76,7 @@ def analyze_fake_news_text():
     text = data.get("text", "").strip()
 
     if not text:
-        return jsonify({"verdict": "No Input", "confidence": 0, "indicators": ["No text provided"]})
+        return jsonify({"verdict": "No Input", "confidence": 0})
 
     vector = fake_news_vectorizer.transform([clean_text(text)])
     pred = fake_news_model.predict(vector)[0]
@@ -104,7 +95,7 @@ def analyze_url():
     url = normalize_url(data.get("url", "").strip())
 
     if not url:
-        return jsonify({"risk_level": "No Input", "risk_score": 0, "indicators": ["No URL provided"]})
+        return jsonify({"risk_level": "No Input", "risk_score": 0})
 
     score = 0
     indicators = []
@@ -130,32 +121,37 @@ def analyze_url():
     score = min(score, 100)
     risk = "Trusted" if score <= 30 else "Suspicious" if score <= 60 else "High Risk"
 
-    return jsonify({"risk_level": risk, "risk_score": score, "indicators": indicators})
+    return jsonify({
+        "risk_level": risk,
+        "risk_score": score,
+        "indicators": indicators
+    })
 
-# ---------- IMAGE ANALYSIS (GOOGLE OCR) ----------
+# ---------- IMAGE ANALYSIS (TESSERACT LOCAL) ----------
 @app.route("/analyze-image", methods=["POST"])
 def analyze_image():
     if "image" not in request.files:
-        return jsonify({"verdict": "No Input", "confidence": 0, "indicators": ["No image uploaded"]})
+        return jsonify({"verdict": "No Input", "confidence": 0})
 
-    image = vision.Image(content=request.files["image"].read())
-    response = vision_client.text_detection(image=image)
+    image_file = request.files["image"]
+    img = Image.open(image_file).convert("L")
 
-    if response.error.message or not response.text_annotations:
-        return jsonify({"verdict": "Unclear", "confidence": 0, "indicators": ["OCR failed"]})
+    extracted_text = pytesseract.image_to_string(img)
 
-    text = response.text_annotations[0].description
-    vector = fake_news_vectorizer.transform([clean_text(text)])
+    if not extracted_text.strip():
+        return jsonify({"verdict": "Unclear", "confidence": 0})
+
+    vector = fake_news_vectorizer.transform([clean_text(extracted_text)])
     pred = fake_news_model.predict(vector)[0]
     prob = fake_news_model.predict_proba(vector)[0]
 
     return jsonify({
         "verdict": "Fake News" if pred == "fake" else "Real News",
         "confidence": int(max(prob) * 100),
-        "indicators": ["Google Vision OCR", "ML Classification"],
-        "extracted_text": text[:300]
+        "indicators": ["Tesseract OCR", "ML Classification"],
+        "extracted_text": extracted_text[:300]
     })
 
 # ---------- RUN ----------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(debug=True)
