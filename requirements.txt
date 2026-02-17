@@ -2,4 +2,6 @@ flask
 scikit-learn
 numpy
 pandas
+pillow
+pytesseract
 google-cloud-vision
