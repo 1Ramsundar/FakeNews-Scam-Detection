@@ -2,4 +2,8 @@ dataset/
 __pycache__/
 *.pyc
 .env
-*.json
+fake-news-ocr-*.json
+bert_fake_checkpoints/
+bert_scam_checkpoints/
+model/bert_fake_news/
+model/bert_scam/

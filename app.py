@@ -9,23 +9,27 @@ from flask import Flask, render_template, request, jsonify
 from PIL import Image
 import pytesseract
 
-# ---------- TESSERACT PATH (LOCAL WINDOWS) ----------
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# ---------- TESSERACT PATH (AUTO-DETECT OS) ----------
+import platform
+if platform.system() == "Windows":
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# On Linux/Docker, tesseract is on PATH by default
 
 # ---------- CREATE APP ----------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
 
 # ---------- LOAD CLASSICAL MODELS ----------
-with open("model/scam_model.pkl", "rb") as f:
+with open(os.path.join(BASE_DIR, "model/scam_model.pkl"), "rb") as f:
     scam_model = pickle.load(f)
 
-with open("model/scam_vectorizer.pkl", "rb") as f:
+with open(os.path.join(BASE_DIR, "model/scam_vectorizer.pkl"), "rb") as f:
     scam_vectorizer = pickle.load(f)
 
-with open("model/fake_news_model.pkl", "rb") as f:
+with open(os.path.join(BASE_DIR, "model/fake_news_model.pkl"), "rb") as f:
     fake_news_model = pickle.load(f)
 
-with open("model/fake_news_vectorizer.pkl", "rb") as f:
+with open(os.path.join(BASE_DIR, "model/fake_news_vectorizer.pkl"), "rb") as f:
     fake_news_vectorizer = pickle.load(f)
 
 # ---------- LAZY-LOAD BERT MODELS ----------
@@ -36,13 +40,15 @@ _bert_fake_tokenizer   = None
 _bert_fake_model       = None
 _bert_device           = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+BERT_SCAM_DIR = os.path.join(BASE_DIR, "model", "bert_scam")
+BERT_FAKE_DIR = os.path.join(BASE_DIR, "model", "bert_fake_news")
+
 def get_bert_scam():
     global _bert_scam_tokenizer, _bert_scam_model
     if _bert_scam_tokenizer is None:
         from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
-        path = "model/bert_scam"
-        _bert_scam_tokenizer = DistilBertTokenizerFast.from_pretrained(path)
-        _bert_scam_model     = DistilBertForSequenceClassification.from_pretrained(path)
+        _bert_scam_tokenizer = DistilBertTokenizerFast.from_pretrained(BERT_SCAM_DIR)
+        _bert_scam_model     = DistilBertForSequenceClassification.from_pretrained(BERT_SCAM_DIR)
         _bert_scam_model.to(_bert_device).eval()
     return _bert_scam_tokenizer, _bert_scam_model
 
@@ -50,9 +56,8 @@ def get_bert_fake():
     global _bert_fake_tokenizer, _bert_fake_model
     if _bert_fake_tokenizer is None:
         from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
-        path = "model/bert_fake_news"
-        _bert_fake_tokenizer = DistilBertTokenizerFast.from_pretrained(path)
-        _bert_fake_model     = DistilBertForSequenceClassification.from_pretrained(path)
+        _bert_fake_tokenizer = DistilBertTokenizerFast.from_pretrained(BERT_FAKE_DIR)
+        _bert_fake_model     = DistilBertForSequenceClassification.from_pretrained(BERT_FAKE_DIR)
         _bert_fake_model.to(_bert_device).eval()
     return _bert_fake_tokenizer, _bert_fake_model
 
@@ -148,8 +153,7 @@ def analyze_text_bert():
     if not text:
         return jsonify({"verdict": "No Input", "confidence": 0})
 
-    bert_model_dir = "model/bert_scam"
-    if not os.path.isdir(bert_model_dir):
+    if not os.path.isdir(BERT_SCAM_DIR):
         return jsonify({
             "verdict":    "Model Not Found",
             "confidence": 0,
@@ -176,8 +180,7 @@ def analyze_fake_news_bert():
     if not text:
         return jsonify({"verdict": "No Input", "confidence": 0})
 
-    bert_model_dir = "model/bert_fake_news"
-    if not os.path.isdir(bert_model_dir):
+    if not os.path.isdir(BERT_FAKE_DIR):
         return jsonify({
             "verdict":    "Model Not Found",
             "confidence": 0,
@@ -261,5 +264,5 @@ def analyze_image():
 #  RUN
 # ==========================================================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 7860))
     app.run(host="0.0.0.0", port=port)
