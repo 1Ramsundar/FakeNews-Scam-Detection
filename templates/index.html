@@ -1,354 +1,692 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fake News & Scam Detection</title>
+    <title>Comparative Analysis of Classical and Transformer-Based Models for Cross-Domain Fake News Detection</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+    <style>
+        /* ══════════════════════════════════════
+           SPLASH SCREEN
+        ══════════════════════════════════════ */
+        #splash {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: #0a0d14;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 28px;
+            overflow: hidden;
+            transition: opacity 0.6s ease, visibility 0.6s ease;
+        }
+
+        #splash.hidden-splash {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        /* Subtle animated grid background */
+        #splash::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(99, 179, 237, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 179, 237, 0.04) 1px, transparent 1px);
+            background-size: 40px 40px;
+            animation: gridPulse 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes gridPulse {
+            from {
+                opacity: 0.4;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Scanning glow beam */
+        #splash::after {
+            content: '';
+            position: absolute;
+            top: -10%;
+            left: -60%;
+            width: 40%;
+            height: 120%;
+            background: linear-gradient(90deg, transparent, rgba(99, 179, 237, 0.07), rgba(66, 153, 225, 0.12), rgba(99, 179, 237, 0.07), transparent);
+            transform: skewX(-15deg);
+            animation: scanBeam 2.4s ease-in-out forwards;
+        }
+
+        @keyframes scanBeam {
+            0% {
+                left: -60%;
+            }
+
+            100% {
+                left: 120%;
+            }
+        }
+
+        /* Logo wrapper — clips to circle */
+        #splash-logo-circle {
+            width: 148px;
+            height: 148px;
+            border-radius: 50%;
+            overflow: hidden;
+            opacity: 0;
+            transform: scale(0.82);
+            animation: logoEntrance 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s forwards;
+            box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.45),
+                0 0 28px rgba(99, 179, 237, 0.55),
+                0 0 70px rgba(66, 153, 225, 0.25);
+            position: relative;
+            z-index: 1;
+            background: #fff;
+            flex-shrink: 0;
+        }
+
+        /* The img inside: cover + crop to top 68% where the man lives */
+        #splash-logo-circle img {
+            width: 148px;
+            height: 218px;
+            /* taller than circle → hides text below */
+            object-fit: cover;
+            object-position: 48% 12%;
+            /* nudges focus onto the man figure */
+            display: block;
+        }
+
+        @keyframes logoEntrance {
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        /* Title */
+        #splash-title {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: clamp(13px, 2.2vw, 16px);
+            font-weight: 600;
+            color: #e2e8f0;
+            text-align: center;
+            max-width: min(680px, 88vw);
+            line-height: 1.6;
+            letter-spacing: 0.02em;
+            opacity: 0;
+            animation: titleFade 0.8s ease 0.75s forwards;
+            position: relative;
+            z-index: 1;
+            text-shadow: 0 0 30px rgba(99, 179, 237, 0.4);
+        }
+
+        #splash-title span {
+            color: #63b3ed;
+        }
+
+        @keyframes titleFade {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Subtitle tag */
+        #splash-sub {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: #4a90c4;
+            opacity: 0;
+            animation: titleFade 0.6s ease 1.1s forwards;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Progress bar */
+        #splash-progress-wrap {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.06);
+            z-index: 1;
+        }
+
+        #splash-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #2b6cb0, #63b3ed, #90cdf4);
+            box-shadow: 0 0 12px #63b3ed;
+            animation: progressFill 2.3s cubic-bezier(0.4, 0, 0.2, 1) 0.15s forwards;
+        }
+
+        @keyframes progressFill {
+            0% {
+                width: 0%;
+            }
+
+            60% {
+                width: 70%;
+            }
+
+            85% {
+                width: 88%;
+            }
+
+            100% {
+                width: 100%;
+            }
+        }
+
+        /* Pulse ring around logo */
+        .splash-pulse {
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(99, 179, 237, 0.35);
+            animation: pulseRing 1.6s ease-out 0.3s infinite;
+            z-index: 0;
+        }
+
+        .splash-pulse:nth-child(2) {
+            animation-delay: 0.8s;
+        }
+
+        @keyframes pulseRing {
+            0% {
+                transform: scale(0.9);
+                opacity: 0.7;
+            }
+
+            100% {
+                transform: scale(1.9);
+                opacity: 0;
+            }
+        }
+
+        /* Logo wrapper to position pulse rings */
+        #splash-logo-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+        }
+    </style>
 </head>
+
 <body>
 
-<!-- HEADER -->
-<header class="header">
-    <div class="logo-row">
-        <div class="logo-mark">FN</div>
-        <div class="logo-text">
-            <h1>Fake News & Online Scam Detection</h1>
-            <p>Cybersecurity Threat Analysis Dashboard</p>
+    <!-- ════════════════════════════════════
+         SPLASH SCREEN
+    ════════════════════════════════════ -->
+    <div id="splash">
+        <div id="splash-logo-wrap">
+            <div class="splash-pulse"></div>
+            <div class="splash-pulse"></div>
+            <!-- Circle-cropped logo showing only the man figure -->
+            <div id="splash-logo-circle">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Fake News Detection Logo">
+            </div>
+        </div>
+        <div id="splash-title">
+            Comparative Analysis of <span>Classical</span> and <span>Transformer-Based</span> Models<br>
+            for Cross-Domain <span>Fake News Detection</span>
+        </div>
+        <div id="splash-sub">AI &nbsp;·&nbsp; NLP &nbsp;·&nbsp; Cybersecurity</div>
+        <div id="splash-progress-wrap">
+            <div id="splash-progress-bar"></div>
         </div>
     </div>
 
-    <p class="context-text">
-        Select a threat analysis module to begin investigation
-    </p>
-</header>
+    <script>
+        /* ── Circular favicon via canvas ── */
+        (function () {
+            var img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = function () {
+                var size = 64;
+                var c = document.createElement('canvas');
+                c.width = c.height = size;
+                var ctx = c.getContext('2d');
+                // Clip to circle
+                ctx.beginPath();
+                ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.clip();
+                // Draw top portion of image (man figure) inside circle
+                // The source rect crops roughly top 68% of the image
+                var srcH = Math.floor(img.naturalHeight * 0.68);
+                ctx.drawImage(img, 0, 0, img.naturalWidth, srcH, 0, 0, size, size);
+                // Replace favicon
+                var link = document.querySelector("link[rel~='icon']");
+                if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+                link.type = 'image/png';
+                link.href = c.toDataURL('image/png');
+            };
+            img.src = "{{ url_for('static', filename='logo.png') }}";
+        })();
 
-<!-- DASHBOARD -->
-<main class="dashboard" id="dashboard">
+        /* ── Dismiss splash after 2.5 s ── */
+        (function () {
+            var splash = document.getElementById('splash');
+            setTimeout(function () {
+                splash.classList.add('hidden-splash');
+                setTimeout(function () { splash.remove(); }, 650);
+            }, 2500);
+        })();
+    </script>
 
-    <div class="card" onclick="openTextTab()">
-        <h2>Text Analysis</h2>
-        <p>Analyze messages, emails or news content</p>
+    <!-- HEADER -->
+    <header class="header">
+        <div class="logo-row">
+            <div class="logo-mark">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Cross-Domain Fake News Detection Logo"
+                    class="logo-img">
+            </div>
+            <div class="logo-text">
+                <h1>Comparative Analysis of Classical and Transformer-Based Models for Cross-Domain Fake News Detection
+                </h1>
+                <p>Cybersecurity Threat Analysis Dashboard</p>
+            </div>
+        </div>
+
+        <p class="context-text">
+            Select a model paradigm to begin your analysis
+        </p>
+    </header>
+
+    <!-- MODEL SELECTOR -->
+    <div class="model-selector" id="model-selector">
+        <button class="model-btn active" id="btn-classical" onclick="switchModel('classical')">
+            <span class="model-btn-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+            </span>
+            Classical Based Model
+        </button>
+        <button class="model-btn" id="btn-transformer" onclick="switchModel('transformer')">
+            <span class="model-btn-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path
+                        d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83">
+                    </path>
+                </svg>
+            </span>
+            Transformer Based Model
+        </button>
     </div>
 
-    <div class="card" onclick="openUrlTab()">
-    <h2>Web URL Check</h2>
-    <p>Verify credibility of a news or message source</p>
+    <!-- ===== CLASSICAL SECTION ===== -->
+    <div id="classical-section">
+
+        <!-- DASHBOARD -->
+        <main class="dashboard" id="dashboard">
+
+            <!-- Card 1: Scam Text -->
+            <div class="card" onclick="openScamTab()">
+                <div class="card-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <h2>Scam Text Analysis</h2>
+                <p>Detect scam &amp; spam in messages or emails</p>
+            </div>
+
+            <!-- Card 2: Fake News Text -->
+            <div class="card" onclick="openFakeNewsTab()">
+                <div class="card-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                </div>
+                <h2>Fake News Analysis</h2>
+                <p>Verify if a news article is real or fake</p>
+            </div>
+
+        </main>
+
+        <!-- SCAM TEXT PANEL -->
+        <section class="panel hidden" id="scam-panel">
+            <div class="panel-header">
+                <h2>Scam Text Analysis</h2>
+                <button class="back-btn" onclick="goBack()">← Back to Dashboard</button>
+            </div>
+            <div class="model-info" style="margin-bottom:20px">📊 Model: TF-IDF + Naive Bayes</div>
+            <textarea id="scam-input" placeholder="Paste a message or email to check for scam content..."></textarea>
+            <button class="analyze-btn" onclick="analyzeScamText()">Analyze Scam Text</button>
+            <div class="result-panel hidden" id="scam-result">
+                <h3>Analysis Result</h3>
+                <p><strong>Verdict:</strong> <span id="scam-verdict"></span></p>
+                <p><strong>Confidence:</strong> <span id="scam-confidence"></span></p>
+                <p class="indicators-title">Indicators:</p>
+                <ul id="scam-indicators"></ul>
+                <div class="model-info">Model: TF-IDF + Multinomial Naive Bayes</div>
+            </div>
+        </section>
+
+        <!-- FAKE NEWS TEXT PANEL -->
+        <section class="panel hidden" id="fake-news-panel">
+            <div class="panel-header">
+                <h2>Fake News Analysis</h2>
+                <button class="back-btn" onclick="goBack()">← Back to Dashboard</button>
+            </div>
+            <div class="model-info" style="margin-bottom:20px">📊 Model: TF-IDF + Naive Bayes</div>
+            <textarea id="fake-news-input" placeholder="Paste a news article or headline to verify..."></textarea>
+            <button class="analyze-btn" onclick="analyzeFakeNewsText()">Analyze Fake News</button>
+            <div class="result-panel hidden" id="fake-news-result">
+                <h3>Analysis Result</h3>
+                <p><strong>Verdict:</strong> <span id="fake-news-verdict"></span></p>
+                <p><strong>Confidence:</strong> <span id="fake-news-confidence"></span></p>
+                <p class="indicators-title">Indicators:</p>
+                <ul id="fake-news-indicators"></ul>
+                <div class="model-info">Model: TF-IDF + Multinomial Naive Bayes</div>
+            </div>
+        </section>
+
     </div>
+    <!-- /classical-section -->
 
-    <div class="card" onclick="openImageTab()">
-        <h2>Image Analysis</h2>
-        <p>Scan images for fake or scam content</p>
+
+    <!-- ===== TRANSFORMER SECTION ===== -->
+    <div id="transformer-section" class="hidden">
+
+        <!-- BERT DASHBOARD -->
+        <main class="dashboard" id="bert-dashboard">
+
+            <div class="card" onclick="openBertScamTab()">
+                <div class="card-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                </div>
+                <div class="bert-badge">DistilBERT</div>
+                <h2>Scam Detection</h2>
+                <p>Transformer-powered scam &amp; spam text classifier</p>
+            </div>
+
+            <div class="card" onclick="openBertFakeNewsTab()">
+                <div class="card-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path
+                            d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83">
+                        </path>
+                    </svg>
+                </div>
+                <div class="bert-badge">DistilBERT</div>
+                <h2>Fake News Detection</h2>
+                <p>Transformer-powered real vs fake news classifier</p>
+            </div>
+
+        </main>
+
+        <!-- BERT SCAM PANEL -->
+        <section class="panel hidden" id="bert-scam-panel">
+            <div class="panel-header">
+                <h2>DistilBERT — Scam Detection</h2>
+                <button class="back-btn" onclick="goBackBert()">← Back to Dashboard</button>
+            </div>
+            <div class="model-mode-badge">🤖 Model: DistilBERT (Transformer)</div>
+            <textarea id="bert-scam-input"
+                placeholder="Paste a message or email to check for scam content..."></textarea>
+            <button class="analyze-btn" id="bert-scam-btn" onclick="analyzeBertScam()">Analyze with DistilBERT</button>
+            <div class="result-panel hidden" id="bert-scam-result">
+                <h3>Analysis Result</h3>
+                <p><strong>Verdict:</strong> <span id="bert-scam-verdict"></span></p>
+                <p><strong>Confidence:</strong> <span id="bert-scam-confidence"></span></p>
+                <p class="indicators-title">Indicators:</p>
+                <ul id="bert-scam-indicators"></ul>
+                <div class="model-info">Model: DistilBERT fine-tuned on SMS Spam Dataset</div>
+            </div>
+        </section>
+
+        <!-- BERT FAKE NEWS PANEL -->
+        <section class="panel hidden" id="bert-fake-panel">
+            <div class="panel-header">
+                <h2>DistilBERT — Fake News Detection</h2>
+                <button class="back-btn" onclick="goBackBert()">← Back to Dashboard</button>
+            </div>
+            <div class="model-mode-badge">🤖 Model: DistilBERT (Transformer)</div>
+            <textarea id="bert-fake-input" placeholder="Paste a news article or headline to verify..."></textarea>
+            <button class="analyze-btn" id="bert-fake-btn" onclick="analyzeBertFakeNews()">Analyze with
+                DistilBERT</button>
+            <div class="result-panel hidden" id="bert-fake-result">
+                <h3>Analysis Result</h3>
+                <p><strong>Verdict:</strong> <span id="bert-fake-verdict"></span></p>
+                <p><strong>Confidence:</strong> <span id="bert-fake-confidence"></span></p>
+                <p class="indicators-title">Indicators:</p>
+                <ul id="bert-fake-indicators"></ul>
+                <div class="model-info">Model: DistilBERT fine-tuned on Fake/Real News Dataset</div>
+            </div>
+        </section>
+
     </div>
-
-</main>
-
-<!-- TEXT ANALYSIS PANEL -->
-<section class="panel hidden" id="text-panel">
-
-    <div class="panel-header">
-        <h2>Text Threat Analysis</h2>
-        <button class="back-btn" onclick="goBack()">← Back to Dashboard</button>
-    </div>
-
-    <textarea id="text-input"
-        placeholder="Paste message, news article, or email content here..."></textarea>
-
-    <button class="analyze-btn" onclick="analyzeText()">Analyze Scam Text</button>
-    <button class="analyze-btn secondary" onclick="analyzeFakeNewsText()">
-    Analyze Fake News Text
-    </button>
-
-    <!-- RESULT PANEL -->
-    <div class="result-panel hidden" id="text-result">
-        <h3>Analysis Result</h3>
-
-        <p><strong>Verdict:</strong> <span class="danger"></span></p>
-        <p><strong>Confidence:</strong> <span id="confidence-text"></span></p>
-
-        <p class="indicators-title">Indicators:</p>
-        <ul>
-            <li>Urgent call-to-action detected</li>
-            <li>Suspicious reward-related keywords</li>
-        </ul>
-    </div>
-
-</section>
-
-<!-- URL ANALYSIS PANEL -->
-<section class="panel hidden" id="url-panel">
-
-    <div class="panel-header">
-        <h2>Web URL Threat Analysis</h2>
-        <button class="back-btn" onclick="goBack()">← Back to Dashboard</button>
-    </div>
-
-    <input
-        type="text"
-        id="url-input"
-        placeholder="Paste website or news URL here..."
-        class="url-input"
-    />
-
-    <button class="analyze-btn" onclick="analyzeUrl()">Analyze URL</button>
-
-   <!-- RESULT PANEL -->
-<div class="result-panel hidden" id="url-result">
-    <h3>Source Analysis Result</h3>
-
-    <div class="result-row">
-        <span class="label">Risk Level</span>
-        <span class="value" id="url-risk-level">---</span>
-    </div>
-
-    <div class="result-row">
-        <span class="label">Risk Score</span>
-        <span class="value" id="url-risk-score">--%</span>
-    </div>
-
-    <div class="indicators">
-        <h4>Detected Indicators</h4>
-        <ul id="url-indicators">
-            <!-- dynamically filled -->
-        </ul>
-    </div>
-
-    <div class="model-info">
-        Method: Rule-based URL Heuristics
-    </div>
-</div>
-</section>
-
- <!--Image Analysis Panel -->
-<section class="panel hidden" id="image-panel">
-
-    <div class="panel-header">
-        <h2>Image Threat Analysis</h2>
-        <button class="back-btn" onclick="goBack()">← Back to Dashboard</button>
-    </div>
-
-    <input type="file" id="image-input" accept="image/*">
-
-    <button class="analyze-btn" onclick="analyzeImage()">Analyze Image</button>
-
-    <div class="result-panel hidden" id="image-result">
-        <h3>Analysis Result</h3>
-
-        <p><strong>Verdict:</strong> <span id="image-verdict"></span></p>
-        <p><strong>Confidence:</strong> <span id="image-confidence"></span></p>
-
-        <p class="indicators-title">Indicators:</p>
-        <ul id="image-indicators"></ul>
-
-        <details>
-            <summary>Extracted Text (OCR)</summary>
-            <p id="ocr-text"></p>
-        </details>
-    </div>
-
-</section>
-
-<script>
-
-    window.onload = function () {
-    document.getElementById("text-panel").classList.add("hidden");
-    document.getElementById("url-panel").classList.add("hidden");
-    document.getElementById("image-panel").classList.add("hidden");
-};
-
-function openTextTab() {
-    document.getElementById("dashboard").style.display = "none";
-    document.getElementById("text-panel").classList.remove("hidden");
-    document.getElementById("text-result").classList.add("hidden");
-}
-
-function goBack() {
-    document.getElementById("text-panel").classList.add("hidden");
-    document.getElementById("url-panel").classList.add("hidden");
-     document.getElementById("image-panel").classList.add("hidden");
-    document.getElementById("dashboard").style.display = "grid";
-}
-
-function analyzeText() {
-    const text = document.getElementById("text-input").value;
-
-    fetch("/analyze-text", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ text: text })
-    })
-    .then(response => response.json())
-    .then(data => {
-        document.getElementById("text-result").classList.remove("hidden");
-
-        const verdictEl = document.querySelector("#text-result span");
-        verdictEl.className = "";
-
-if (data.verdict === "Safe") {
-    verdictEl.classList.add("safe");
-} else {
-    verdictEl.classList.add("danger");
-}
-
-        verdictEl.textContent = data.verdict;
-
-        document.getElementById("confidence-text").textContent = data.confidence + "%";
-
-        const ul = document.querySelector("#text-result ul");
-        ul.innerHTML = "";
-        data.indicators.forEach(indicator => {
-            const li = document.createElement("li");
-            li.textContent = indicator;
-            ul.appendChild(li);
-        });
-    });
-}
-
-function analyzeFakeNewsText() {
-    const text = document.getElementById("text-input").value;
-
-    fetch("/analyze-fake-news-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text })
-    })
-    .then(response => response.json())
-    .then(data => {
-        document.getElementById("text-result").classList.remove("hidden");
-
-        const verdictEl = document.querySelector("#text-result span");
-        verdictEl.textContent = data.verdict;
-        verdictEl.className = data.verdict === "Fake News" ? "danger" : "safe";
-
-        document.getElementById("confidence-text").textContent =
-            data.confidence + "%";
-
-        const ul = document.querySelector("#text-result ul");
-        ul.innerHTML = "";
-        data.indicators.forEach(indicator => {
-            const li = document.createElement("li");
-            li.textContent = indicator;
-            ul.appendChild(li);
-        });
-    });
-}
+    <!-- /transformer-section -->
 
 
-function openUrlTab() {
-    document.getElementById("dashboard").style.display = "none";
-    document.getElementById("url-panel").classList.remove("hidden");
-    document.getElementById("url-result").classList.add("hidden");
-}
+    <script>
 
-function analyzeUrl() {
-    const url = document.getElementById("url-input").value.trim();
-    if (!url) {
-        alert("Please enter a URL");
-        return;
-    }
+        window.onload = function () {
+            document.getElementById("scam-panel").classList.add("hidden");
+            document.getElementById("fake-news-panel").classList.add("hidden");
+        };
 
-    fetch("/analyze-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url })
-    })
-    .then(response => response.json())
-    .then(data => {
-        const resultPanel = document.getElementById("url-result");
-        const riskLevel = document.getElementById("url-risk-level");
-        const riskScore = document.getElementById("url-risk-score");
-        const indicatorsList = document.getElementById("url-indicators");
+        /* ══════════════════════════════════════
+           MODEL SWITCHER
+        ══════════════════════════════════════ */
+        function switchModel(model) {
+            const classicalSection = document.getElementById("classical-section");
+            const transformerSection = document.getElementById("transformer-section");
+            const btnClassical = document.getElementById("btn-classical");
+            const btnTransformer = document.getElementById("btn-transformer");
 
-        resultPanel.classList.remove("hidden");
-
-        // Set values
-        riskLevel.textContent = data.risk_level;
-        riskScore.textContent = data.risk_score + "%";
-
-        // Reset classes
-        riskLevel.className = "value";
-
-        // Color coding
-        if (data.risk_level === "Trusted") {
-            riskLevel.classList.add("safe");
-        } else if (data.risk_level === "Suspicious") {
-            riskLevel.classList.add("warning");
-        } else {
-            riskLevel.classList.add("danger");
+            if (model === "classical") {
+                classicalSection.classList.remove("hidden");
+                transformerSection.classList.add("hidden");
+                btnClassical.classList.add("active");
+                btnTransformer.classList.remove("active");
+                goBack();
+            } else {
+                classicalSection.classList.add("hidden");
+                transformerSection.classList.remove("hidden");
+                btnTransformer.classList.add("active");
+                btnClassical.classList.remove("active");
+                goBackBert();
+            }
         }
 
-        // Indicators list
-        indicatorsList.innerHTML = "";
-        if (data.indicators.length === 0) {
-            indicatorsList.innerHTML = "<li>No suspicious patterns detected</li>";
-        } else {
-            data.indicators.forEach(ind => {
+        /* ══════════════════════════════════════
+           SHARED HELPERS
+        ══════════════════════════════════════ */
+        function renderResult(verdictElId, confElId, indicatorsElId, resultPanelId, data, safeLabel) {
+            document.getElementById(resultPanelId).classList.remove("hidden");
+            const verdictEl = document.getElementById(verdictElId);
+            verdictEl.textContent = data.verdict;
+            verdictEl.className = (data.verdict === safeLabel || data.verdict === "Real News" || data.verdict === "Safe") ? "safe" : "danger";
+            document.getElementById(confElId).textContent = data.confidence + "%";
+            const ul = document.getElementById(indicatorsElId);
+            ul.innerHTML = "";
+            (data.indicators || []).forEach(i => {
                 const li = document.createElement("li");
-                li.textContent = ind;
-                indicatorsList.appendChild(li);
+                li.textContent = i;
+                ul.appendChild(li);
             });
+            if (data.error) { ul.innerHTML = `<li style="color:var(--warning)">${data.error}</li>`; }
         }
-    })
-    .catch(err => {
-        console.error(err);
-        alert("Error analyzing URL");
-    });
-}
 
-function openImageTab() {
-    document.getElementById("dashboard").style.display = "none";
-    document.getElementById("image-panel").classList.remove("hidden");
-    document.getElementById("image-result").classList.add("hidden");
-}
+        function setBtnLoading(btnId, loading) {
+            const btn = document.getElementById(btnId);
+            btn.disabled = loading;
+            btn.textContent = loading ? "⏳ Analyzing…" : btn.dataset.label;
+        }
 
-function analyzeImage() {
-    const fileInput = document.getElementById("image-input");
+        /* ══════════════════════════════════════
+           CLASSICAL — NAVIGATION
+        ══════════════════════════════════════ */
+        function openScamTab() {
+            document.getElementById("dashboard").style.display = "none";
+            document.getElementById("scam-panel").classList.remove("hidden");
+            document.getElementById("scam-result").classList.add("hidden");
+        }
 
-    if (!fileInput.files.length) {
-        alert("Please upload an image");
-        return;
-    }
+        function openFakeNewsTab() {
+            document.getElementById("dashboard").style.display = "none";
+            document.getElementById("fake-news-panel").classList.remove("hidden");
+            document.getElementById("fake-news-result").classList.add("hidden");
+        }
 
-    const formData = new FormData();
-    formData.append("image", fileInput.files[0]);
+        function goBack() {
+            document.getElementById("scam-panel").classList.add("hidden");
+            document.getElementById("fake-news-panel").classList.add("hidden");
+            document.getElementById("dashboard").style.display = "grid";
+        }
 
-    fetch("/analyze-image", {
-        method: "POST",
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        document.getElementById("image-result").classList.remove("hidden");
+        /* ══════════════════════════════════════
+           CLASSICAL — SCAM TEXT
+        ══════════════════════════════════════ */
+        function analyzeScamText() {
+            const text = document.getElementById("scam-input").value.trim();
+            if (!text) { alert("Please enter some text"); return; }
+            fetch("/analyze-text", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    renderResult("scam-verdict", "scam-confidence", "scam-indicators", "scam-result", data, "Safe");
+                });
+        }
 
-        const verdictEl = document.getElementById("image-verdict");
-        verdictEl.textContent = data.verdict;
-        verdictEl.className = data.verdict === "Safe" ? "safe" : "danger";
-
-        document.getElementById("image-confidence").textContent =
-            data.confidence + "%";
-
-        const ul = document.getElementById("image-indicators");
-        ul.innerHTML = "";
-        data.indicators.forEach(i => {
-            const li = document.createElement("li");
-            li.textContent = i;
-            ul.appendChild(li);
-        });
-
-        document.getElementById("ocr-text").textContent =
-            data.extracted_text || "No text extracted";
-    });
-}
-
-</script>
+        /* ══════════════════════════════════════
+           CLASSICAL — FAKE NEWS TEXT
+        ══════════════════════════════════════ */
+        function analyzeFakeNewsText() {
+            const text = document.getElementById("fake-news-input").value.trim();
+            if (!text) { alert("Please enter some text"); return; }
+            fetch("/analyze-fake-news-text", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    renderResult("fake-news-verdict", "fake-news-confidence", "fake-news-indicators", "fake-news-result", data, "Real News");
+                });
+        }
 
 
-<!-- FOOTER -->
-<footer class="footer">
-    <p>Made by Ramsundar</p>
-</footer>
+        /* ══════════════════════════════════════
+           BERT — NAVIGATION
+        ══════════════════════════════════════ */
+        function goBackBert() {
+            document.getElementById("bert-scam-panel").classList.add("hidden");
+            document.getElementById("bert-fake-panel").classList.add("hidden");
+            document.getElementById("bert-dashboard").style.display = "grid";
+        }
+
+        function openBertScamTab() {
+            document.getElementById("bert-dashboard").style.display = "none";
+            document.getElementById("bert-scam-panel").classList.remove("hidden");
+            document.getElementById("bert-scam-result").classList.add("hidden");
+            // store button label for loading state
+            const btn = document.getElementById("bert-scam-btn");
+            btn.dataset.label = btn.textContent;
+        }
+
+        function openBertFakeNewsTab() {
+            document.getElementById("bert-dashboard").style.display = "none";
+            document.getElementById("bert-fake-panel").classList.remove("hidden");
+            document.getElementById("bert-fake-result").classList.add("hidden");
+            const btn = document.getElementById("bert-fake-btn");
+            btn.dataset.label = btn.textContent;
+        }
+
+        /* ══════════════════════════════════════
+           BERT — SCAM ANALYSIS
+        ══════════════════════════════════════ */
+        function analyzeBertScam() {
+            const text = document.getElementById("bert-scam-input").value.trim();
+            if (!text) { alert("Please enter some text"); return; }
+            setBtnLoading("bert-scam-btn", true);
+            fetch("/analyze-text-bert", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    setBtnLoading("bert-scam-btn", false);
+                    renderResult("bert-scam-verdict", "bert-scam-confidence", "bert-scam-indicators", "bert-scam-result", data, "Safe");
+                })
+                .catch(() => { setBtnLoading("bert-scam-btn", false); alert("Error contacting server"); });
+        }
+
+        /* ══════════════════════════════════════
+           BERT — FAKE NEWS ANALYSIS
+        ══════════════════════════════════════ */
+        function analyzeBertFakeNews() {
+            const text = document.getElementById("bert-fake-input").value.trim();
+            if (!text) { alert("Please enter some text"); return; }
+            setBtnLoading("bert-fake-btn", true);
+            fetch("/analyze-fake-news-bert", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    setBtnLoading("bert-fake-btn", false);
+                    renderResult("bert-fake-verdict", "bert-fake-confidence", "bert-fake-indicators", "bert-fake-result", data, "Real News");
+                })
+                .catch(() => { setBtnLoading("bert-fake-btn", false); alert("Error contacting server"); });
+        }
+
+    </script>
+
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <p>Made by Ramsundar & Ayush Bindhani</p>
+    </footer>
 
 </body>
+
 </html>

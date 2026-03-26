@@ -5,3 +5,7 @@ pandas
 pillow
 pytesseract
 google-cloud-vision
+torch
+transformers
+datasets
+accelerate
